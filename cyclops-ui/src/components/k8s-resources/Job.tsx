@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Col, Divider, Row, Alert } from "antd";
+import { Col, Divider, Row, Alert, Button, Spin, Tooltip } from "antd";
 import axios from "axios";
 import { mapResponseError } from "../../utils/api/errors";
 import PodTable from "./common/PodTable";
+import { useSpring, animated } from "react-spring";
 
 interface Props {
   name: string;
@@ -20,32 +21,42 @@ const Job = ({ name, namespace }: Props) => {
     description: "",
   });
 
-  useEffect(() => {
-    function fetchJob() {
-      axios
-        .get(`/api/resources`, {
-          params: {
-            group: `batch`,
-            version: `v1`,
-            kind: `Job`,
-            name: name,
-            namespace: namespace,
-          },
-        })
-        .then((res) => {
-          setJob(res.data);
-        })
-        .catch((error) => {
-          setError(mapResponseError(error));
-        });
-    }
+  const [loading, setLoading] = useState(true);
 
+  const fetchJob = () => {
+    setLoading(true);
+    axios
+      .get(`/api/resources`, {
+        params: {
+          group: `batch`,
+          version: `v1`,
+          kind: `Job`,
+          name: name,
+          namespace: namespace,
+        },
+      })
+      .then((res) => {
+        setJob(res.data);
+        setLoading(false);
+      })
+      .catch((error) => {
+        setError(mapResponseError(error));
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
     fetchJob();
     const interval = setInterval(() => fetchJob(), 15000);
     return () => {
       clearInterval(interval);
     };
   }, [name, namespace]);
+
+  const fadeAnimation = useSpring({
+    opacity: loading ? 0.5 : 1,
+    transform: loading ? "scale(0.9)" : "scale(1)",
+  });
 
   return (
     <div>
@@ -55,6 +66,11 @@ const Job = ({ name, namespace }: Props) => {
           description={error.description}
           type="error"
           closable
+          action={
+            <Button size="small" onClick={fetchJob}>
+              Retry
+            </Button>
+          }
           afterClose={() => {
             setError({
               message: "",
@@ -66,14 +82,25 @@ const Job = ({ name, namespace }: Props) => {
       )}
       <Row>
         <Divider
-          style={{ fontSize: "120%" }}
+          style={{ fontSize: "120%", display: "flex", justifyContent: "space-between", alignItems: "center" }}
           orientationMargin="0"
           orientation={"left"}
         >
-          Pods: {job.pods.length}
+          <span>Pods: {job.pods.length}</span>
+          <Tooltip title={`Status: ${job.status}`}>
+            <span style={{ color: job.status === "Running" ? "green" : "red" }}>{job.status}</span>
+          </Tooltip>
         </Divider>
         <Col span={24} style={{ overflowX: "auto" }}>
-          <PodTable namespace={namespace} pods={job.pods} />
+          <animated.div style={fadeAnimation}>
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "20px" }}>
+                <Spin tip="Loading..." />
+              </div>
+            ) : (
+              <PodTable namespace={namespace} pods={job.pods} />
+            )}
+          </animated.div>
         </Col>
       </Row>
     </div>
